@@ -8,40 +8,20 @@ is the most reliable and universally supported.
 After initialization, try waving various 13.56MHz RFID cards over it!
 """
 
-import board
-import busio
-from digitalio import DigitalInOut
-
-#
-# NOTE: pick the import that matches the interface being used
-#
-from adafruit_pn532.i2c import PN532_I2C
-
-# from adafruit_pn532.spi import PN532_SPI
-# from adafruit_pn532.uart import PN532_UART
-
-# I2C connection:
-i2c = busio.I2C(board.SCL, board.SDA)
-
-# Non-hardware
-# pn532 = PN532_I2C(i2c, debug=False)
+from adafruit_pn532.spi import PN532_SPI
+from machine import SPI, Pin
+from micropython import const
 
 # With I2C, we recommend connecting RSTPD_N (reset) to a digital pin for manual
 # harware reset
-reset_pin = DigitalInOut(board.D6)
-# On Raspberry Pi, you must also connect a pin to P32 "H_Request" for hardware
-# wakeup! this means we don't need to do the I2C clock-stretch thing
-req_pin = DigitalInOut(board.D12)
-pn532 = PN532_I2C(i2c, debug=False, reset=reset_pin, req=req_pin)
+#reset_pin = Pin(4, mode=Pin.OUT, value=1)
 
-# SPI connection:
-# spi = busio.SPI(board.SCK, board.MOSI, board.MISO)
-# cs_pin = DigitalInOut(board.D5)
-# pn532 = PN532_SPI(spi, cs_pin, debug=False)
-
-# UART connection
-# uart = busio.UART(board.TX, board.RX, baudrate=115200, timeout=100)
-# pn532 = PN532_UART(uart, debug=False)
+# ESP32 specific
+# https://docs.micropython.org/en/latest/esp32/quickref.html#hardware-spi-bus
+vspi = SPI(2, baudrate=100000, polarity=0, phase=0, bits=8, firstbit=0,
+           sck=Pin(18), mosi=Pin(23), miso=Pin(19))
+cs_pin = Pin(5, mode=Pin.OUT, value=1)
+pn532 = PN532_SPI(vspi, cs_pin, debug=False)
 
 ic, ver, rev, support = pn532.firmware_version
 print("Found PN532 with firmware version: {0}.{1}".format(ver, rev))
