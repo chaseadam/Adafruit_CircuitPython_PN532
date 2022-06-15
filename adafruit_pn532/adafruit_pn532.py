@@ -27,7 +27,6 @@ Implementation Notes
 """
 
 import time
-from digitalio import Direction
 
 from micropython import const
 
@@ -184,10 +183,9 @@ class PN532:
         if self._reset_pin:
             if self.debug:
                 print("Resetting")
-            self._reset_pin.direction = Direction.OUTPUT
-            self._reset_pin.value = False
+            self._reset_pin(0)
             time.sleep(0.1)
-            self._reset_pin.value = True
+            self._reset_pin(1)
             time.sleep(0.1)
         self._wakeup()
 

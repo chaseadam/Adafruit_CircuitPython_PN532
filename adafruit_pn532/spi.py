@@ -18,9 +18,10 @@ __version__ = "0.0.0-auto.0"
 __repo__ = "https://github.com/adafruit/Adafruit_CircuitPython_PN532.git"
 
 import time
-from adafruit_bus_device import spi_device
 from micropython import const
 from adafruit_pn532.adafruit_pn532 import PN532
+
+from machine import SPI, Pin
 
 _SPI_STATREAD = const(0x02)
 _SPI_DATAWRITE = const(0x01)
@@ -47,17 +48,22 @@ class PN532_SPI(PN532):
     def __init__(self, spi, cs_pin, *, irq=None, reset=None, debug=False):
         """Create an instance of the PN532 class using SPI"""
         self.debug = debug
-        self._spi = spi_device.SPIDevice(spi, cs_pin)
+        self._cs_pin = cs_pin
+        # https://docs.micropython.org/en/latest/esp32/quickref.html#hardware-spi-bus
+        #vspi = SPI(2, baudrate=100000, polarity=0, phase=0, bits=8, firstbit=0, sck=Pin(18), mosi=Pin(23), miso=Pin(19))
+        self._spi = spi
         super().__init__(debug=debug, irq=irq, reset=reset)
 
     def _wakeup(self):
         """Send any special commands/data to wake up PN532"""
         if self._reset_pin:
-            self._reset_pin.value = True
+            self._reset_pin(1)
             time.sleep(0.01)
-        with self._spi as spi:
-            spi.write(bytearray([0x00]))  # pylint: disable=no-member
-            time.sleep(0.01)
+        spi = self._spi
+        self._cs_pin(0)
+        spi.write(bytearray([0x00]))  # pylint: disable=no-member
+        self._cs_pin(1)
+        time.sleep(0.01)
         self.low_power = False
         self.SAM_configuration()  # Put the PN532 back in normal mode
 
@@ -65,15 +71,17 @@ class PN532_SPI(PN532):
         """Poll PN532 if status byte is ready, up to `timeout` seconds"""
         status_cmd = bytearray([reverse_bit(_SPI_STATREAD), 0x00])
         status_response = bytearray([0x00, 0x00])
-        timestamp = time.monotonic()
-        with self._spi as spi:
-            while (time.monotonic() - timestamp) < timeout:
-                spi.write_readinto(
-                    status_cmd, status_response
-                )  # pylint: disable=no-member
-                if reverse_bit(status_response[1]) == 0x01:  # LSB data is read in MSB
-                    return True  # Not busy anymore!
-                time.sleep(0.01)  # pause a bit till we ask again
+        timestamp = time.ticks_ms()
+        spi = self._spi
+        while (time.ticks_diff(time.ticks_ms(), timestamp)) < timeout*1000:
+            self._cs_pin(0)
+            spi.write_readinto(
+                status_cmd, status_response
+            )  # pylint: disable=no-member
+            self._cs_pin(1)
+            if reverse_bit(status_response[1]) == 0x01:  # LSB data is read in MSB
+                return True  # Not busy anymore!
+            time.sleep_ms(10)  # pause a bit till we ask again
         # We timed out!
         return False
 
@@ -84,8 +92,10 @@ class PN532_SPI(PN532):
         # Add the SPI data read signal byte, but LSB'ify it
         frame[0] = reverse_bit(_SPI_DATAREAD)
 
-        with self._spi as spi:
-            spi.write_readinto(frame, frame)  # pylint: disable=no-member
+        spi = self._spi
+        self._cs_pin(0)
+        spi.write_readinto(frame, frame)  # pylint: disable=no-member
+        self._cs_pin(1)
         for i, val in enumerate(frame):
             frame[i] = reverse_bit(val)  # turn LSB data to MSB
         if self.debug:
@@ -99,5 +109,7 @@ class PN532_SPI(PN532):
         rev_frame = [reverse_bit(x) for x in bytes([_SPI_DATAWRITE]) + framebytes]
         if self.debug:
             print("Writing: ", [hex(i) for i in rev_frame])
-        with self._spi as spi:
-            spi.write(bytes(rev_frame))  # pylint: disable=no-member
+        spi = self._spi
+        self._cs_pin(0)
+        spi.write(bytes(rev_frame))  # pylint: disable=no-member
+        self._cs_pin(1)
