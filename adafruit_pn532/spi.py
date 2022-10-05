@@ -111,5 +111,7 @@ class PN532_SPI(PN532):
             print("Writing: ", [hex(i) for i in rev_frame])
         spi = self._spi
         self._cs_pin(0)
+        time.sleep(0.01)
         spi.write(bytes(rev_frame))  # pylint: disable=no-member
+        time.sleep(0.01)
         self._cs_pin(1)
